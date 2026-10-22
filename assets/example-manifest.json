@@ -1,0 +1,7 @@
+{
+  "seeds": 3,
+  "envs": ["CartPole-v1"],
+  "arms": ["method", "baseline"],
+  "no_difference": false,
+  "note": "Fill from what was actually run; do not round seeds up or add unmeasured envs."
+}

@@ -1,0 +1,13 @@
+{
+  "name": "dafahaha-skills",
+  "owner": {
+    "name": "Daizhi Liao (dafahaha)"
+  },
+  "plugins": [
+    {
+      "name": "claim-boundary",
+      "source": "./",
+      "description": "Line-level gate comparing a draft's wording against a measured-scope manifest (seeds, arms, envs, null result); flags overclaim and extrapolation."
+    }
+  ]
+}
