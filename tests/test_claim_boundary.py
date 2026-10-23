@@ -330,3 +330,66 @@ def test_usage_error_exits_one():
     with pytest.raises(SystemExit) as e:
         cb.main(["x"])  # missing required --manifest
     assert e.value.code == 1
+
+
+# ---- R8 review fixes ----
+
+def test_negated_robustness_not_flagged(tmp_path: Path):
+    # P1-1: "did not observe stable ... across seeds" is not a robustness claim.
+    m = cb.load_manifest(_manifest(tmp_path, seeds=1))
+    findings = cb.scan_line("We did not observe stable performance across seeds.", 4, m)
+    assert not any(f.rule == "robustness-below-n3" for f in findings)
+
+
+def test_no_difference_generic_improvement_fails(tmp_path: Path):
+    # P1-2: "we improved by 5%" with no_difference=true must FAIL.
+    m = cb.load_manifest(_manifest(tmp_path, no_difference=True))
+    findings = cb.scan_line("We improved the score by 5% over baseline.", 4, m)
+    assert any(f.rule == "no-difference-claimed" and f.severity == "FAIL" for f in findings)
+
+
+def test_no_difference_chinese_improvement_fails(tmp_path: Path):
+    m = cb.load_manifest(_manifest(tmp_path, no_difference=True))
+    findings = cb.scan_line("我们提升了 5%。", 4, m)
+    assert any(f.rule == "no-difference-claimed" for f in findings)
+
+
+def test_duplicate_arms_count_as_one(tmp_path: Path):
+    # P2-6: ["baseline","baseline"] is fewer than two distinct arms.
+    m = cb.load_manifest(_manifest(tmp_path, arms=["baseline", "baseline"]))
+    findings = cb.scan_line("Our method outperforms the baseline.", 2, m)
+    assert any(f.rule == "superiority-no-arm" and f.severity == "FAIL" for f in findings)
+
+
+def test_chinese_negation_superiority_not_flagged(tmp_path: Path):
+    # P2-1: "并未显著优于" is not a superiority claim.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    findings = cb.scan_text("我们的方法并未显著优于基线。", m)
+    assert not any(f.rule == "superiority-no-arm" for f in findings)
+
+
+def test_negated_seed_count_not_used(tmp_path: Path):
+    # P2-3: "did not use 5 seeds" must not be treated as a claimed 5.
+    m = cb.load_manifest(_manifest(tmp_path, seeds=3))
+    findings = cb.scan_line("We did not use 5 seeds here.", 3, m)
+    assert not any(f.rule == "seed-count-mismatch" for f in findings)
+
+
+def test_cross_clause_negation_does_not_suppress(tmp_path: Path):
+    # P2-2: a negation in the previous sentence must not suppress a claim.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    findings = cb.scan_text("We did not test X. Our method outperforms the baseline.", m)
+    assert any(f.rule == "superiority-no-arm" for f in findings)
+
+
+def test_odd_inline_backtick_truncated(tmp_path: Path):
+    # P2-4: an unpaired inline-code opener truncates the rest of the line.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    findings = cb.scan_text("Use the `outperforms helper which outperforms everything.", m)
+    assert not any(f.rule == "superiority-no-arm" for f in findings)
+
+
+def test_missing_file_exits_one(tmp_path: Path):
+    # P2-7: missing draft yields a clean exit 1, not a traceback.
+    mp = _manifest(tmp_path)
+    assert cb.main([str(tmp_path / "nope.md"), "--manifest", str(mp)]) == 1

@@ -72,12 +72,23 @@ INLINE_CODE = re.compile(r"`[^`]*`")
 # not be flagged as a positive claim).
 NEGATION_RE = re.compile(
     r"(?:\b(?:do|does|did|will|would|can|could|should|is|are|was|were)?\s*not\b|"
-    r"\bno\b|\bnever\b|\bwithout\b|n't\b|并不|并非|没有|不能|不会|不应|不可|无法|没有)",
+    r"\bno\b|\bnever\b|\bwithout\b|n't\b|"
+    r"并不|并未|并非|没有|未曾|毫不|绝非|不能|不会|不应|不可|无法)",
     re.IGNORECASE,
 )
+# Clause separators used to bound the negation/qualification window so a
+# negation in a previous sentence cannot suppress a claim in the next.
+_CLAUSE_SEP = ".;:!?，。；：！？"
 # A qualification just after a universal phrase that narrows it to a list.
 QUALIFY_RE = re.compile(
     r"(listed|shown|in table|in the (?:table|manifest|appendix)|above|measured|evaluated)",
+    re.IGNORECASE,
+)
+# Generic improvement wording (R5 covers null-result honesty; superiority words
+# alone miss "we improved / gains / better / 提升 / 改进").
+IMPROVE_WORDS = re.compile(
+    r"(\bimprov(?:e|ed|ement|ing)\b|\bgain(?:s|ed)?\b|\bbetter\b|\bboost(?:s|ed)?\b|"
+    r"提升|改进|进步|提高|改善)",
     re.IGNORECASE,
 )
 # Fields allowed in the manifest; anything else is a typo and must not be
@@ -86,11 +97,23 @@ MANIFEST_KEYS = {"seeds", "envs", "arms", "no_difference"}
 
 
 def _is_negated(line: str, start: int) -> bool:
-    return bool(NEGATION_RE.search(line[max(0, start - 40):start]))
+    """True when a negation appears in the same clause before the keyword.
+    Bounded by the nearest preceding clause separator so a negated prior
+    sentence cannot suppress a positive claim in this one."""
+    window = line[max(0, start - 30):start]
+    cut = max(window.rfind(c) for c in _CLAUSE_SEP)
+    if cut >= 0:
+        window = window[cut + 1:]
+    return bool(NEGATION_RE.search(window))
 
 
 def _is_qualified(line: str, end: int) -> bool:
-    return bool(QUALIFY_RE.search(line[end:end + 40]))
+    """True when a narrowing qualifier follows in the same clause."""
+    window = line[end:end + 30]
+    cut = min((window.find(c) for c in _CLAUSE_SEP if c in window), default=-1)
+    if cut >= 0:
+        window = window[:cut]
+    return bool(QUALIFY_RE.search(window))
 
 
 def strip_code(text: str) -> tuple[list[str], bool]:
@@ -108,7 +131,12 @@ def strip_code(text: str) -> tuple[list[str], bool]:
         if in_fence:
             cleaned.append("")
         else:
-            cleaned.append(INLINE_CODE.sub("", line))
+            cleaned_line = INLINE_CODE.sub("", line)
+            # An unpaired (odd) inline-code opener: truncate at it so the
+            # dangling "code" is not scanned as prose.
+            if "`" in cleaned_line:
+                cleaned_line = cleaned_line[:cleaned_line.find("`")]
+            cleaned.append(cleaned_line)
     return cleaned, in_fence
 
 
@@ -146,12 +174,15 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
     out: list[Finding] = []
     seeds = manifest["seeds"]
     arms = manifest["arms"]
+    # Deduplicate arms case-insensitively so ["baseline","baseline"] does not
+    # count as two arms.
+    unique_arms = {a.lower() for a in arms}
 
     # R1: superiority wording (a negated phrase such as "does not outperform"
     # is not a superiority claim).
     sup = SUPERIORITY.search(line)
     if sup and not _is_negated(line, sup.start()):
-        if len(arms) < 2:
+        if len(unique_arms) < 2:
             out.append(Finding(
                 lineno, "FAIL", "superiority-no-arm",
                 "superiority wording appears but the manifest declares fewer than two arms to compare",
@@ -164,8 +195,10 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
                 "report the seed-level distribution and CI instead of a comparative adjective",
             ))
 
-    # R2: seed/robustness claim below n=3
-    if SEED_ROBUST.search(line) and seeds < 3:
+    # R2: seed/robustness claim below n=3 (a negated "did not observe stable"
+    # is not a robustness claim).
+    rob = SEED_ROBUST.search(line)
+    if rob and not _is_negated(line, rob.start()) and seeds < 3:
         out.append(Finding(
             lineno, "FAIL", "robustness-below-n3",
             f"robustness/stable wording but manifest seeds={seeds} (<3)",
@@ -184,9 +217,11 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
 
     # R4: claimed seed count disagrees with manifest. A line may mention several
     # numbers (a quick look over the full run); the claim matches the manifest
-    # when ANY mentioned seed count equals it.
-    mentioned = [int(m.group(1)) for m in SEED_COUNT_EN.finditer(line)]
-    mentioned += [int(m.group(1)) for m in SEED_COUNT_ZH.finditer(line)]
+    # when ANY non-negated mentioned seed count equals it.
+    mentioned = [int(m.group(1)) for m in SEED_COUNT_EN.finditer(line)
+                 if not _is_negated(line, m.start())]
+    mentioned += [int(m.group(1)) for m in SEED_COUNT_ZH.finditer(line)
+                  if not _is_negated(line, m.start())]
     if seeds > 0 and mentioned and seeds not in mentioned:
         out.append(Finding(
             lineno, "FAIL", "seed-count-mismatch",
@@ -194,17 +229,24 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
             "align the number with the actual runs; do not round up",
         ))
 
-    # R5: improvement wording while manifest records no difference. A negated
-    # phrase is consistent with the null result, so it is not flagged.
-    if manifest["no_difference"] and sup is not None and not _is_negated(line, sup.start()):
-        out.append(Finding(
-            lineno, "FAIL", "no-difference-claimed",
-            "manifest records no observed difference, yet improvement wording appears",
-            "report the null result honestly; do not package it as a win",
-        ))
+    # R5: improvement wording while manifest records no difference. Covers both
+    # superiority words and generic improvement words; a negated phrase is
+    # consistent with the null result and is not flagged.
+    if manifest["no_difference"]:
+        positive = [
+            m for m in list(SUPERIORITY.finditer(line)) + list(IMPROVE_WORDS.finditer(line))
+            if not _is_negated(line, m.start())
+        ]
+        if positive:
+            out.append(Finding(
+                lineno, "FAIL", "no-difference-claimed",
+                "manifest records no observed difference, yet improvement wording appears",
+                "report the null result honestly; do not package it as a win",
+            ))
 
     # R6: draft itself admits no difference but pairs it with superiority elsewhere
-    if NO_DIFF_WORDS.search(line) and manifest["no_difference"] is False:
+    nd = NO_DIFF_WORDS.search(line)
+    if nd and not _is_negated(line, nd.start()) and manifest["no_difference"] is False:
         out.append(Finding(
             lineno, "WARN", "null-wording-vs-manifest",
             "draft mentions no difference but manifest.no_difference is false; check consistency",
@@ -287,6 +329,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(rendered)
     except (ValueError, OSError) as exc:
+        print(f"claim-boundary: error: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # unexpected programming error: clean one-line, exit 1
         print(f"claim-boundary: error: {exc}", file=sys.stderr)
         return 1
 

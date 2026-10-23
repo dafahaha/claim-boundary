@@ -1,5 +1,26 @@
 # Changelog — claim-boundary
 
+v1.4.0 — 2026-10-23
+
+## Round-8 independent clean review (fresh reviewer, cold reading)
+- P1-1 (fixed): the robustness rule now applies the same negation check as the
+  others, so "we did not observe stable performance across seeds" is not a
+  robustness FAIL.
+- P1-2 (fixed): the no-difference rule now covers generic improvement wording
+  (improve/improved/gain/better/boost and 提升/改进/进步/提高/改善), not only
+  superiority words.
+- P2-1 (fixed): Chinese negation expanded (并未/未曾/毫不/绝非).
+- P2-2 (fixed): negation/qualification windows are clause-bounded and shorter,
+  so a negation in a previous sentence cannot suppress a claim in the next.
+- P2-3 (fixed): seed-count matching ignores negated mentions ("did not use 5
+  seeds").
+- P2-4 (fixed): an unpaired inline-code opener truncates the rest of the line.
+- P2-6 (fixed): arms are deduplicated case-insensitively, so
+  ["baseline","baseline"] counts as fewer than two arms.
+- P2-7 (fixed): null-wording applies negation; an unexpected error still
+  yields a clean exit 1 rather than a traceback.
+- Suite: 51 tests (9 added).
+
 v1.3.0 — 2026-10-23
 
 ## Round-7 independent clean review (fresh reviewer, cold reading)
