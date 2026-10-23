@@ -100,10 +100,14 @@ def load_manifest(path: Path) -> dict:
     # not silently read as seeds=1.
     if not isinstance(data["seeds"], int) or isinstance(data["seeds"], bool) or data["seeds"] < 0:
         raise ValueError("manifest.seeds must be a non-negative integer")
-    if not isinstance(data["arms"], list):
-        raise ValueError("manifest.arms must be a list")
+    if not isinstance(data["arms"], list) or not all(isinstance(a, str) for a in data["arms"]):
+        raise ValueError("manifest.arms must be a list of arm-name strings")
     if not isinstance(data["envs"], list) or not all(isinstance(e, str) for e in data["envs"]):
         raise ValueError("manifest.envs must be a list of strings")
+    # no_difference must be a real boolean; the string "false" is truthy and a
+    # numeric 0 would be neither False nor True, so validate explicitly.
+    if not isinstance(data["no_difference"], bool):
+        raise ValueError("manifest.no_difference must be a boolean")
     return data
 
 
@@ -214,8 +218,17 @@ def format_report(findings: list[Finding], draft: str, manifest_path: str) -> st
     return "\n".join(lines) + "\n"
 
 
+class _Parser(argparse.ArgumentParser):
+    """ArgumentParser whose usage errors exit 1 (argparse default is 2, which
+    collides with the WARN exit code). --help still exits 0."""
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(1, f"{self.prog}: error: {message}\n")
+
+
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Gate draft wording against a measured-scope manifest (stdlib).")
+    ap = _Parser(description="Gate draft wording against a measured-scope manifest (stdlib).")
     ap.add_argument("draft", help="Markdown draft file")
     ap.add_argument("--manifest", required=True, help="JSON measured-scope manifest")
     ap.add_argument("--json", action="store_true")
@@ -226,21 +239,20 @@ def main(argv: list[str] | None = None) -> int:
         manifest = load_manifest(Path(args.manifest))
         text = Path(args.draft).read_text(encoding="utf-8-sig")
         findings = scan_text(text, manifest)
-    except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+        if args.json:
+            rendered = json.dumps(
+                {"findings": [asdict(f) for f in findings]}, indent=2, ensure_ascii=False
+            )
+        else:
+            rendered = format_report(findings, args.draft, args.manifest)
+        # Output writing stays inside the try so a bad path is a clean exit 1.
+        if args.output:
+            Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+        else:
+            print(rendered)
+    except (ValueError, OSError) as exc:
         print(f"claim-boundary: error: {exc}", file=sys.stderr)
         return 1
-
-    if args.json:
-        rendered = json.dumps(
-            {"findings": [asdict(f) for f in findings]}, indent=2, ensure_ascii=False
-        )
-    else:
-        rendered = format_report(findings, args.draft, args.manifest)
-
-    if args.output:
-        Path(args.output).write_text(rendered + "\n", encoding="utf-8")
-    else:
-        print(rendered)
 
     if any(f.severity == "FAIL" for f in findings):
         return 3

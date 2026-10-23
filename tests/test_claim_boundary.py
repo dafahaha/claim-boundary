@@ -277,3 +277,28 @@ def test_manifest_bom_does_not_break_first_env(tmp_path: Path):
     p.write_bytes(b"\xef\xbb\xbf" + payload.encode("utf-8"))
     m = cb.load_manifest(p)
     assert cb.scan_line("Tested on CartPole-v1.", 5, m) == []
+
+
+# ---- R5 review: no_difference bool, arms elements, usage exit 1 ----
+
+def test_manifest_no_difference_must_be_bool(tmp_path: Path):
+    bad = tmp_path / "m.json"
+    bad.write_text(json.dumps({"seeds": 3, "no_difference": "false"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="no_difference"):
+        cb.load_manifest(bad)
+
+
+def test_manifest_arms_must_be_strings(tmp_path: Path):
+    bad = tmp_path / "m.json"
+    bad.write_text(json.dumps({"seeds": 3, "arms": [None, None]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="arms"):
+        cb.load_manifest(bad)
+
+
+def test_usage_error_exits_one():
+    with pytest.raises(SystemExit) as e:
+        cb.main([])
+    assert e.value.code == 1
+    with pytest.raises(SystemExit) as e:
+        cb.main(["x"])  # missing required --manifest
+    assert e.value.code == 1

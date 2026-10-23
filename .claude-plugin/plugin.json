@@ -1,6 +1,6 @@
 {
   "name": "claim-boundary",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Gate a research draft's wording against a declared measured-scope manifest: flags superiority claims without a comparison arm, robustness below n=3 seeds, universal extrapolation, seed-count mismatch, and null-result packaged as a win. Stdlib, offline.",
   "author": {
     "name": "Daizhi Liao (dafahaha)"

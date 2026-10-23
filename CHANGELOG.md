@@ -1,5 +1,19 @@
 # Changelog — claim-boundary
 
+v1.2.0 — 2026-10-23
+
+## Round-5 independent technical review (fresh reviewer, cold reading)
+- P1-1 (fixed): argparse usage errors (missing positional/--manifest, invalid
+  type) exited 2, colliding with the WARN exit code; a custom parser now exits 1
+  for usage errors (--help still exits 0).
+- P2-1 (fixed): broadened the CLI catch to OSError (PermissionError, etc.).
+- P2-2 (fixed): `no_difference` is now validated as a real boolean (the string
+  "false" is truthy and would otherwise be treated as a null result).
+- P2-3 (fixed): `--output` write is inside the try (clean exit 1 on bad path).
+- P2-4 (fixed): `arms` elements must be strings (e.g. `[null, null]` no longer
+  counts as a two-arm comparison).
+- New tests: no_difference bool, arms elements, usage exit 1. Suite: 35 -> 38.
+
 v1.0.0 — 2026-10-22
 
 ## v1 (baseline)
