@@ -160,10 +160,16 @@ def load_manifest(path: Path) -> dict:
     # not silently read as seeds=1.
     if not isinstance(data["seeds"], int) or isinstance(data["seeds"], bool) or data["seeds"] < 0:
         raise ValueError("manifest.seeds must be a non-negative integer")
-    if not isinstance(data["arms"], list) or not all(isinstance(a, str) for a in data["arms"]):
-        raise ValueError("manifest.arms must be a list of arm-name strings")
-    if not isinstance(data["envs"], list) or not all(isinstance(e, str) for e in data["envs"]):
-        raise ValueError("manifest.envs must be a list of strings")
+    if (
+        not isinstance(data["arms"], list)
+        or not all(isinstance(a, str) and a.strip() != "" for a in data["arms"])
+    ):
+        raise ValueError("manifest.arms must be a list of non-empty arm-name strings")
+    if (
+        not isinstance(data["envs"], list)
+        or not all(isinstance(e, str) and e.strip() != "" for e in data["envs"])
+    ):
+        raise ValueError("manifest.envs must be a list of non-empty strings")
     # no_difference must be a real boolean; the string "false" is truthy and a
     # numeric 0 would be neither False nor True, so validate explicitly.
     if not isinstance(data["no_difference"], bool):
@@ -191,7 +197,9 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
                 "superiority wording appears but the manifest declares fewer than two arms to compare",
                 "either add the baseline arm to the manifest or soften to 'on this setup'",
             ))
-        elif seeds < 3:
+        # Checked independently (not elif) so a low-n wording is also reported
+        # when the comparison-arm gate fails; the FAIL exit code still dominates.
+        if seeds < 3:
             out.append(Finding(
                 lineno, "WARN", "superiority-low-n",
                 f"superiority wording rests on n={seeds} seed(s); reviewers usually require >=3",
@@ -231,6 +239,14 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
             lineno, "FAIL", "seed-count-mismatch",
             f"draft mentions {mentioned} seed(s) but manifest declares {seeds}",
             "align the number with the actual runs; do not round up",
+        ))
+    elif seeds == 0 and mentioned:
+        # The manifest omits the seed count (default 0), yet the draft states a
+        # number of seeds; warn rather than silently leaving it unverified.
+        out.append(Finding(
+            lineno, "WARN", "seed-count-undeclared",
+            f"draft mentions {mentioned} seed(s) but manifest declares no seed count (seeds=0)",
+            "set manifest.seeds to the actual number of runs, or remove the count",
         ))
 
     # R5: improvement wording while manifest records no difference. Covers both

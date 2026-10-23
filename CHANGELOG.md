@@ -1,5 +1,11 @@
 # Changelog — claim-boundary
 
+v1.6.0 — 2026-10-23
+- P2-1 (fixed): the no-arm FAIL and low-n WARN are checked independently.
+- P2-2 (fixed): a draft seed count when the manifest omits seeds is a WARN.
+- P2-5 (fixed): blank/whitespace arm or env strings are rejected.
+- Suite: 58 pytest.
+
 v1.5.0 — 2026-10-23
 
 ## Round-9 independent clean review (fresh reviewer, cold reading)

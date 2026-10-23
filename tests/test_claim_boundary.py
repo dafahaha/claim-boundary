@@ -427,3 +427,27 @@ def test_negated_env_token_not_declared(tmp_path: Path):
     m = cb.load_manifest(_manifest(tmp_path, envs=[]))
     findings = cb.scan_line("We did not test CartPole-v1 here.", 1, m)
     assert not any(f.rule == "env-not-declared" for f in findings)
+
+
+def test_blank_arm_and_env_strings_rejected(tmp_path: Path):
+    # R10 P2-5: ["", "baseline"] must not count as two arms.
+    with pytest.raises(ValueError):
+        cb.load_manifest(_manifest(tmp_path, arms=["", "baseline"]))
+    with pytest.raises(ValueError):
+        cb.load_manifest(_manifest(tmp_path, envs=["   "]))
+
+
+def test_low_n_warn_independent_of_no_arm(tmp_path: Path):
+    # R10 P2-1: no-arm FAIL and low-n WARN are both reported.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[], seeds=1))
+    findings = cb.scan_line("Our method outperforms the baseline.", 2, m)
+    rules = {f.rule for f in findings}
+    assert "superiority-no-arm" in rules
+    assert "superiority-low-n" in rules
+
+
+def test_seed_count_undeclared_warn(tmp_path: Path):
+    # R10 P2-2: a draft seed count when manifest seeds=0 is a WARN, not ignored.
+    m = cb.load_manifest(_manifest(tmp_path, seeds=0))
+    findings = cb.scan_line("We ran 5 seeds.", 1, m)
+    assert any(f.rule == "seed-count-undeclared" for f in findings)
