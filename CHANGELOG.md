@@ -1,5 +1,15 @@
 # Changelog — claim-boundary
 
+v1.6.1 — 2026-10-23
+
+## Round-11 independent clean review (fresh reviewer, cold reading)
+- P2-1 (fixed): manifest arms/envs are normalized (stripped) after validation,
+  so the validation口径 and the later comparison口径 match. `" baseline "` and
+  `"baseline"` are one arm (no false suppression of the no-arm gate), and
+  `" CartPole-v1 "` matches a declared CartPole-v1 token (no false
+  env-not-declared).
+- Suite: 59 pytest (1 added).
+
 v1.6.0 — 2026-10-23
 - P2-1 (fixed): the no-arm FAIL and low-n WARN are checked independently.
 - P2-2 (fixed): a draft seed count when the manifest omits seeds is a WARN.

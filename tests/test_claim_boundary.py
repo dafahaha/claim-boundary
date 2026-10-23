@@ -451,3 +451,12 @@ def test_seed_count_undeclared_warn(tmp_path: Path):
     m = cb.load_manifest(_manifest(tmp_path, seeds=0))
     findings = cb.scan_line("We ran 5 seeds.", 1, m)
     assert any(f.rule == "seed-count-undeclared" for f in findings)
+
+
+def test_arms_envs_whitespace_normalized(tmp_path: Path):
+    # R11 P2: " baseline " and "baseline" are one arm; " CartPole-v1 " matches.
+    m = cb.load_manifest(_manifest(
+        tmp_path, arms=[" Method ", " baseline "], envs=[" CartPole-v1 "]))
+    assert len({a.lower() for a in m["arms"]}) == 2
+    findings = cb.scan_line("We tested on CartPole-v1.", 1, m)
+    assert not any(f.rule == "env-not-declared" for f in findings)

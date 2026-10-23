@@ -174,6 +174,11 @@ def load_manifest(path: Path) -> dict:
     # numeric 0 would be neither False nor True, so validate explicitly.
     if not isinstance(data["no_difference"], bool):
         raise ValueError("manifest.no_difference must be a boolean")
+    # Normalize arms/envs so the validation口径 (strip non-empty) matches the
+    # later comparison口径 (set membership): " baseline " and "baseline" are one
+    # arm, and " CartPole-v1 " matches a declared CartPole-v1 token.
+    data["arms"] = [a.strip() for a in data["arms"]]
+    data["envs"] = [e.strip() for e in data["envs"]]
     return data
 
 
