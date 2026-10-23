@@ -1,5 +1,21 @@
 # Changelog — claim-boundary
 
+v1.7.0 — 2026-10-23
+
+## Round-12 independent clean review (fresh reviewer, cold reading)
+- P1 (fixed): the half-width comma was missing from the clause separators, so a
+  negation in a previous clause leaked into the next one ("we do not rely on X,
+  yet our model outperforms Y" was silently treated as negated). The comma now
+  bounds the negation window; the Chinese enumeration comma (、) is deliberately
+  excluded so a negation still covers a list.
+- P2 (fixed): "fails/failed to <verb>" is recognized as a negation.
+- P2 (fixed): CommonMark `~~~` fences are stripped (same character/length closes).
+- P2 (fixed): qualitative collocations ("gained a better understanding",
+  "deeper insight") no longer count as a performance win under R5.
+- P2 (fixed): the module docstring now lists all seven rules and declares that
+  seed counts are recognized as Arabic numerals only.
+- Suite: 64 pytest (5 added).
+
 v1.6.1 — 2026-10-23
 
 ## Round-11 independent clean review (fresh reviewer, cold reading)

@@ -174,6 +174,44 @@ def test_qualified_universal_not_flagged(tmp_path: Path):
     assert findings == []
 
 
+def test_comma_bounds_negation_previous_clause(tmp_path: Path):
+    # P1: a negation before a half-width comma must not suppress a claim in the
+    # next clause ("we do not rely on X, yet our model outperforms Y").
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    findings = cb.scan_text(
+        "We do not rely on pre-training, yet our model outperforms the baseline.", m
+    )
+    assert any(f.rule == "superiority-no-arm" and f.severity == "FAIL" for f in findings)
+
+
+def test_without_phrase_then_comma_claim_is_flagged(tmp_path: Path):
+    # P1: "Without extra data, our method outperforms Y" — the comma separates
+    # the prepositional phrase from the positive main clause.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    findings = cb.scan_text("Without extra data, our method outperforms the baseline.", m)
+    assert any(f.rule == "superiority-no-arm" and f.severity == "FAIL" for f in findings)
+
+
+def test_fails_to_is_negation(tmp_path: Path):
+    # "fails to outperform" is a negated claim, not a superiority statement.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    assert cb.scan_text("Our model fails to outperform the baseline.", m) == []
+
+
+def test_tilde_fenced_block_skipped(tmp_path: Path):
+    # CommonMark ~~~ fences must be stripped the same way as ``` fences.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    text = "Intro.\n~~~\nThis outperforms everything and generalizes to all.\n~~~\nDone.\n"
+    assert cb.scan_text(text, m) == []
+
+
+def test_non_performance_understanding_not_flagged(tmp_path: Path):
+    # R5: qualitative "gained a better understanding" is not a performance win.
+    m = cb.load_manifest(_manifest(tmp_path, no_difference=True))
+    findings = cb.scan_text("We gained a better understanding of the failure modes.", m)
+    assert findings == []
+
+
 def test_unknown_manifest_field_raises(tmp_path: Path):
     # A typo "seed" must not be silently ignored.
     p = tmp_path / "scope.json"

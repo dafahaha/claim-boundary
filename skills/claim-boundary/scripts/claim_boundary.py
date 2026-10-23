@@ -9,7 +9,12 @@ a difference was observed) and a draft Markdown file, flag line by line:
   * seed/robustness claims below n=3;
   * a claimed seed count that disagrees with the manifest;
   * universal extrapolation ("all environments", "generalizes to every task");
-  * improvement wording when the manifest records no observed difference.
+  * improvement wording when the manifest records no observed difference;
+  * a draft that admits no difference while the manifest says otherwise;
+  * a versioned environment token (e.g. CartPole-v1) not declared in the manifest.
+
+Seed counts are recognized as Arabic numerals (e.g. "5 seeds", "5个种子");
+spelled-out numbers ("three seeds", "三个种子") are not parsed.
 
 Pure standard library. Offline. It checks wording vs the manifest; it does not
 fact-check the experiments themselves and does not rewrite prose.
@@ -66,7 +71,9 @@ SEED_COUNT_ZH = re.compile(r"(\d+)\s*个?种子")
 NO_DIFF_WORDS = re.compile(r"(no (observed )?difference|no improvement|failed to improve|未观察到差异|无提升)", re.IGNORECASE)
 # Gym-style env token with a version suffix, e.g. CartPole-v1, Humanoid-v2.
 ENV_TOKEN = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*-v\d+)\b")
-FENCE = re.compile(r"^\s*```")
+# CommonMark fenced code: three or more backticks OR tildes. The closing fence
+# must use the same character and be at least as long as the opener.
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 INLINE_CODE = re.compile(r"`[^`]*`")
 # Negation within a short window before a flagged keyword (a word-based gate
 # cannot parse grammar, but "does not outperform" / "not all environments" must
@@ -74,12 +81,17 @@ INLINE_CODE = re.compile(r"`[^`]*`")
 NEGATION_RE = re.compile(
     r"(?:\b(?:do|does|did|will|would|can|could|should|is|are|was|were)?\s*not\b|"
     r"\bno\b|\bnever\b|\bwithout\b|n't\b|"
-    r"并不|并未|并非|没有|未曾|毫不|绝非|不能|不会|不应|不可|无法)",
+    r"\bfail(?:s|ed|ing)?\s+to\s+|"
+    r"并不|并未|并非|没有|未能|未曾|毫不|绝非|不能|不会|不应|不可|无法)",
     re.IGNORECASE,
 )
 # Clause separators used to bound the negation/qualification window so a
-# negation in a previous sentence cannot suppress a claim in the next.
-_CLAUSE_SEP = ".;:!?，。；：！？"
+# negation in a previous sentence cannot suppress a claim in the next. The
+# half-width comma is included: "we do not rely on X, yet our model
+# outperforms Y" is two clauses, and the negation belongs to the first.
+# The Chinese enumeration comma (、) is deliberately excluded so a negation
+# still covers every item in a list ("不支持 A、B、C 环境").
+_CLAUSE_SEP = ".,;:!?，。；：！？"
 # A qualification just after a universal phrase that narrows it to a list.
 QUALIFY_RE = re.compile(
     r"(listed|shown|in table|in the (?:table|manifest|appendix)|above|measured|evaluated)",
@@ -90,6 +102,15 @@ QUALIFY_RE = re.compile(
 IMPROVE_WORDS = re.compile(
     r"(\bimprov(?:e|ed|ement|ing)\b|\bgain(?:s|ed)?\b|\bbetter\b|\bboost(?:s|ed)?\b|"
     r"提升|改进|进步|提高|改善)",
+    re.IGNORECASE,
+)
+# Qualitative (non-performance) collocations that must NOT count as a performance
+# improvement under R5: "gained a better understanding", "deeper insight",
+# "improved intuition/comprehension". A word-based gate otherwise mistakes
+# insight about the failure modes for a win.
+_NON_PERF_RE = re.compile(
+    r"(?:\b(?:gain(?:s|ed)?|better|deeper|improved|richer)\b\W+(?:\w+\W+){0,2}?"
+    r"(?:understanding|insight|intuition|comprehension|knowledge)\b)",
     re.IGNORECASE,
 )
 # Fields allowed in the manifest; anything else is a typo and must not be
@@ -124,12 +145,27 @@ def strip_code(text: str) -> tuple[list[str], bool]:
     than silently dropping the trailing lines."""
     cleaned: list[str] = []
     in_fence = False
+    fence_char = ""
+    fence_len = 0
     for line in text.splitlines():
-        if FENCE.match(line):
-            in_fence = not in_fence
+        m = FENCE.match(line)
+        if m and not in_fence:
+            opener = m.group(1)
+            in_fence = True
+            fence_char = opener[0]
+            fence_len = len(opener)
+            cleaned.append("")
+            continue
+        if m and in_fence and m.group(1)[0] == fence_char and len(m.group(1)) >= fence_len:
+            # Same character, at least as long: the fence closes.
+            in_fence = False
+            fence_char = ""
+            fence_len = 0
             cleaned.append("")
             continue
         if in_fence:
+            # A line of the other fence type, or a too-short closer, is still
+            # content inside the block.
             cleaned.append("")
         else:
             cleaned_line = INLINE_CODE.sub("", line)
@@ -258,9 +294,14 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
     # superiority words and generic improvement words; a negated phrase is
     # consistent with the null result and is not flagged.
     if manifest["no_difference"]:
+        def _in_non_perf(mm: "re.Match[str]") -> bool:
+            return any(
+                nm.start() <= mm.start() and mm.end() <= nm.end()
+                for nm in _NON_PERF_RE.finditer(line)
+            )
         positive = [
             m for m in list(SUPERIORITY.finditer(line)) + list(IMPROVE_WORDS.finditer(line))
-            if not _is_negated(line, m.start())
+            if not _is_negated(line, m.start()) and not _in_non_perf(m)
         ]
         if positive:
             out.append(Finding(
