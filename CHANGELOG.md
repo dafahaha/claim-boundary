@@ -1,5 +1,12 @@
 # Changelog — claim-boundary
 
+v1.2.1 — 2026-10-23
+
+## Round-6 independent clean review (fresh reviewer, cold reading)
+- No changes: a fresh reviewer found 0 P0/P1/P2 and confirmed the bool-as-int
+  guard, strict-boolean no_difference, code-block stripping, exit-code ordering
+  and fail-closed handling. Suite stays at 38.
+
 v1.2.0 — 2026-10-23
 
 ## Round-5 independent technical review (fresh reviewer, cold reading)
