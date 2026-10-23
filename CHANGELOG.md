@@ -1,5 +1,15 @@
 # Changelog — claim-boundary
 
+v1.3.0 — 2026-10-23
+
+## Round-7 independent clean review (fresh reviewer, cold reading)
+- Negated superiority/universal phrases ("does not outperform", "not all
+  environments") and narrowed universal phrases ("all environments listed in
+  Table 1") are no longer flagged.
+- Unknown manifest fields are now rejected (a typo such as "seed" was silently
+  ignored and then filled with a default).
+- Suite: 42 tests (4 added).
+
 v1.2.1 — 2026-10-23
 
 ## Round-6 independent clean review (fresh reviewer, cold reading)

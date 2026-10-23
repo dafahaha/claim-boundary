@@ -67,6 +67,30 @@ NO_DIFF_WORDS = re.compile(r"(no (observed )?difference|no improvement|failed to
 ENV_TOKEN = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*-v\d+)\b")
 FENCE = re.compile(r"^\s*```")
 INLINE_CODE = re.compile(r"`[^`]*`")
+# Negation within a short window before a flagged keyword (a word-based gate
+# cannot parse grammar, but "does not outperform" / "not all environments" must
+# not be flagged as a positive claim).
+NEGATION_RE = re.compile(
+    r"(?:\b(?:do|does|did|will|would|can|could|should|is|are|was|were)?\s*not\b|"
+    r"\bno\b|\bnever\b|\bwithout\b|n't\b|并不|并非|没有|不能|不会|不应|不可|无法|没有)",
+    re.IGNORECASE,
+)
+# A qualification just after a universal phrase that narrows it to a list.
+QUALIFY_RE = re.compile(
+    r"(listed|shown|in table|in the (?:table|manifest|appendix)|above|measured|evaluated)",
+    re.IGNORECASE,
+)
+# Fields allowed in the manifest; anything else is a typo and must not be
+# silently ignored (e.g. "seed" instead of "seeds").
+MANIFEST_KEYS = {"seeds", "envs", "arms", "no_difference"}
+
+
+def _is_negated(line: str, start: int) -> bool:
+    return bool(NEGATION_RE.search(line[max(0, start - 40):start]))
+
+
+def _is_qualified(line: str, end: int) -> bool:
+    return bool(QUALIFY_RE.search(line[end:end + 40]))
 
 
 def strip_code(text: str) -> tuple[list[str], bool]:
@@ -92,6 +116,13 @@ def load_manifest(path: Path) -> dict:
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     if not isinstance(data, dict):
         raise ValueError("manifest must be a JSON object")
+    # Reject unknown fields up front so a typo (e.g. "seed" for "seeds") is not
+    # silently ignored and then filled with a default.
+    unknown = sorted(set(data) - MANIFEST_KEYS)
+    if unknown:
+        raise ValueError(
+            f"unknown manifest field(s) {unknown}; expected one of {sorted(MANIFEST_KEYS)}"
+        )
     data.setdefault("seeds", 0)
     data.setdefault("envs", [])
     data.setdefault("arms", [])
@@ -116,8 +147,10 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
     seeds = manifest["seeds"]
     arms = manifest["arms"]
 
-    # R1: superiority wording
-    if SUPERIORITY.search(line):
+    # R1: superiority wording (a negated phrase such as "does not outperform"
+    # is not a superiority claim).
+    sup = SUPERIORITY.search(line)
+    if sup and not _is_negated(line, sup.start()):
         if len(arms) < 2:
             out.append(Finding(
                 lineno, "FAIL", "superiority-no-arm",
@@ -139,8 +172,10 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
             "run more seeds or remove 'stable/robust/multiple seeds' wording",
         ))
 
-    # R3: universal extrapolation
-    if UNIVERSAL.search(line):
+    # R3: universal extrapolation; a negated ("not all environments") or
+    # narrowed ("all environments listed in Table 1") phrase is not extrapolation.
+    uni = UNIVERSAL.search(line)
+    if uni and not _is_negated(line, uni.start()) and not _is_qualified(line, uni.end()):
         out.append(Finding(
             lineno, "FAIL", "universal-scope",
             "universal extrapolation ('all/every/any/generalizes to') beyond measured scope",
@@ -159,8 +194,9 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
             "align the number with the actual runs; do not round up",
         ))
 
-    # R5: improvement wording while manifest records no difference
-    if manifest["no_difference"] and SUPERIORITY.search(line):
+    # R5: improvement wording while manifest records no difference. A negated
+    # phrase is consistent with the null result, so it is not flagged.
+    if manifest["no_difference"] and sup is not None and not _is_negated(line, sup.start()):
         out.append(Finding(
             lineno, "FAIL", "no-difference-claimed",
             "manifest records no observed difference, yet improvement wording appears",

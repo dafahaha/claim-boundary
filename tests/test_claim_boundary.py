@@ -154,6 +154,34 @@ def test_inline_code_skipped(tmp_path: Path):
     assert findings == []
 
 
+def test_negated_superiority_not_flagged(tmp_path: Path):
+    # "does not outperform" is not a superiority claim.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    findings = cb.scan_text("Our method does not significantly outperform the baseline.", m)
+    assert findings == []
+
+
+def test_negated_universal_not_flagged(tmp_path: Path):
+    m = cb.load_manifest(_manifest(tmp_path))
+    findings = cb.scan_text("We do not claim to cover all environments.", m)
+    assert findings == []
+
+
+def test_qualified_universal_not_flagged(tmp_path: Path):
+    # "all environments listed in Table 1" is narrowed, not extrapolated.
+    m = cb.load_manifest(_manifest(tmp_path))
+    findings = cb.scan_text("All environments listed in Table 1 use the same wrapper.", m)
+    assert findings == []
+
+
+def test_unknown_manifest_field_raises(tmp_path: Path):
+    # A typo "seed" must not be silently ignored.
+    p = tmp_path / "scope.json"
+    p.write_text(json.dumps({"seed": 3, "envs": [], "arms": ["a", "b"], "no_difference": False}), encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown manifest field"):
+        cb.load_manifest(p)
+
+
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
