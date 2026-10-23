@@ -393,3 +393,37 @@ def test_missing_file_exits_one(tmp_path: Path):
     # P2-7: missing draft yields a clean exit 1, not a traceback.
     mp = _manifest(tmp_path)
     assert cb.main([str(tmp_path / "nope.md"), "--manifest", str(mp)]) == 1
+
+
+def test_negated_first_match_does_not_suppress_later_claim(tmp_path: Path):
+    # R9 P1: a negated first superiority phrase must not suppress a later
+    # non-negated claim on the same line.
+    m = cb.load_manifest(_manifest(tmp_path, arms=[]))
+    findings = cb.scan_line(
+        "We do not outperform A; our method outperforms B.", 1, m
+    )
+    assert any(f.rule == "superiority-no-arm" and f.severity == "FAIL" for f in findings)
+
+
+def test_negated_first_robustness_keeps_later(tmp_path: Path):
+    m = cb.load_manifest(_manifest(tmp_path, seeds=1))
+    findings = cb.scan_line(
+        "Not stable across seeds, but we used several seeds here.", 1, m
+    )
+    assert any(f.rule == "robustness-below-n3" for f in findings)
+
+
+def test_universal_any_environment_variant(tmp_path: Path):
+    # R9 P2-1: "works in any environment" / "any setting" is extrapolation.
+    m = cb.load_manifest(_manifest(tmp_path))
+    assert any(f.rule == "universal-scope" for f in cb.scan_line(
+        "Our agent works in any environment.", 1, m))
+    assert any(f.rule == "universal-scope" for f in cb.scan_line(
+        "It is robust across all settings.", 1, m))
+
+
+def test_negated_env_token_not_declared(tmp_path: Path):
+    # R9 P2-4: "did not test CartPole-v1" is not an undeclared-env WARN.
+    m = cb.load_manifest(_manifest(tmp_path, envs=[]))
+    findings = cb.scan_line("We did not test CartPole-v1 here.", 1, m)
+    assert not any(f.rule == "env-not-declared" for f in findings)

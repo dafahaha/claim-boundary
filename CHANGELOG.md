@@ -1,5 +1,21 @@
 # Changelog — claim-boundary
 
+v1.5.0 — 2026-10-23
+
+## Round-9 independent clean review (fresh reviewer, cold reading)
+- P1-1 (fixed): the superiority, robustness, and universal rules now iterate
+  every match. A negated first phrase ("we do not outperform A") no longer
+  suppresses a later non-negated claim on the same line ("...; our method
+  outperforms B").
+- P2-1 (fixed): universal wording covers "any environment", "any/all
+  settings", "all domains", "works in any".
+- P2-4 (fixed): a negated env token ("did not test CartPole-v1") is not an
+  undeclared-env warning.
+- Kept as intentional (P2-5): a line mentioning several seed counts passes
+  when any non-negated count equals the manifest; requiring exact set
+  equality would false-positive on lines comparing different experiments.
+- Suite: 55 tests (4 added).
+
 v1.4.0 — 2026-10-23
 
 ## Round-8 independent clean review (fresh reviewer, cold reading)

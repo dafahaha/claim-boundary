@@ -56,8 +56,9 @@ SEED_ROBUST = re.compile(
     re.IGNORECASE,
 )
 UNIVERSAL = re.compile(
-    r"(all environments|every environment|any task|generalizes? to (all|every|any)|universally|"
-    r"across all tasks|all tasks|所有环境|任意任务|泛化到所有|通用普适)",
+    r"(all environments?|every environments?|any environments?|all settings?|any settings?|"
+    r"all domains?|any task|generalizes? to (all|every|any)|universally|"
+    r"across all tasks|all tasks|works? in any|所有环境|任意环境|任意任务|全领域|泛化到所有|通用普适)",
     re.IGNORECASE,
 )
 SEED_COUNT_EN = re.compile(r"(\d+)\s*seeds?", re.IGNORECASE)
@@ -178,10 +179,12 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
     # count as two arms.
     unique_arms = {a.lower() for a in arms}
 
-    # R1: superiority wording (a negated phrase such as "does not outperform"
-    # is not a superiority claim).
-    sup = SUPERIORITY.search(line)
-    if sup and not _is_negated(line, sup.start()):
+    # R1: superiority wording. Iterate every match: a negated first phrase
+    # ("we do not outperform A") must not suppress a later non-negated claim
+    # ("...; our method outperforms B").
+    for m in SUPERIORITY.finditer(line):
+        if _is_negated(line, m.start()):
+            continue
         if len(unique_arms) < 2:
             out.append(Finding(
                 lineno, "FAIL", "superiority-no-arm",
@@ -196,24 +199,25 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
             ))
 
     # R2: seed/robustness claim below n=3 (a negated "did not observe stable"
-    # is not a robustness claim).
-    rob = SEED_ROBUST.search(line)
-    if rob and not _is_negated(line, rob.start()) and seeds < 3:
-        out.append(Finding(
-            lineno, "FAIL", "robustness-below-n3",
-            f"robustness/stable wording but manifest seeds={seeds} (<3)",
-            "run more seeds or remove 'stable/robust/multiple seeds' wording",
-        ))
+    # is not a robustness claim). Every non-negated match is checked.
+    for m in SEED_ROBUST.finditer(line):
+        if not _is_negated(line, m.start()) and seeds < 3:
+            out.append(Finding(
+                lineno, "FAIL", "robustness-below-n3",
+                f"robustness/stable wording but manifest seeds={seeds} (<3)",
+                "run more seeds or remove 'stable/robust/multiple seeds' wording",
+            ))
 
     # R3: universal extrapolation; a negated ("not all environments") or
     # narrowed ("all environments listed in Table 1") phrase is not extrapolation.
-    uni = UNIVERSAL.search(line)
-    if uni and not _is_negated(line, uni.start()) and not _is_qualified(line, uni.end()):
-        out.append(Finding(
-            lineno, "FAIL", "universal-scope",
-            "universal extrapolation ('all/every/any/generalizes to') beyond measured scope",
-            "name the exact env/scale measured; state what was NOT tested",
-        ))
+    # Every non-negated, non-qualified match is flagged.
+    for m in UNIVERSAL.finditer(line):
+        if not _is_negated(line, m.start()) and not _is_qualified(line, m.end()):
+            out.append(Finding(
+                lineno, "FAIL", "universal-scope",
+                "universal extrapolation ('all/every/any/generalizes to') beyond measured scope",
+                "name the exact env/scale measured; state what was NOT tested",
+            ))
 
     # R4: claimed seed count disagrees with manifest. A line may mention several
     # numbers (a quick look over the full run); the claim matches the manifest
@@ -253,10 +257,12 @@ def scan_line(line: str, lineno: int, manifest: dict) -> list[Finding]:
             "set no_difference=true if that is what the data show",
         ))
 
-    # R7: a versioned env token not declared in manifest.envs
+    # R7: a versioned env token not declared in manifest.envs. A negated token
+    # ("we did not test CartPole-v1") is not an undeclared claim.
     declared = {e.lower() for e in manifest["envs"]}
-    for tok in ENV_TOKEN.findall(line):
-        if tok.lower() not in declared:
+    for m in ENV_TOKEN.finditer(line):
+        tok = m.group(1)
+        if tok.lower() not in declared and not _is_negated(line, m.start()):
             out.append(Finding(
                 lineno, "WARN", "env-not-declared",
                 f"env token {tok!r} appears but is not listed in manifest.envs {manifest['envs']}",
