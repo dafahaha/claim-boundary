@@ -28,11 +28,11 @@ No build, no dependencies.
 
   ```bash
   claude plugin marketplace add dafahaha/claim-boundary
-  claude plugin install claim-boundary@dafahaha-skills
+  claude plugin install claim-boundary@claim-boundary
   ```
 
   In a session: `/plugin marketplace add dafahaha/claim-boundary`, then
-  `/plugin install claim-boundary@dafahaha-skills`.
+  `/plugin install claim-boundary@claim-boundary`.
 - Claude Code (local development): `claude --plugin-dir ./claim-boundary`.
 - Portable skill (Codex/Cursor/Gemini CLI/Roo Code): copy
   `skills/claim-boundary/` into the client's skills directory.
