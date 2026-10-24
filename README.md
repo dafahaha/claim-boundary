@@ -84,7 +84,7 @@ Manifest (`assets/example-manifest.json`):
 python -m pytest tests/ -q
 ```
 
-38 tests, stdlib only; manual predicate-mutation spot checks (inverting the R1
+64 tests, stdlib only; manual predicate-mutation spot checks (inverting the R1
 arm gate turns the superiority tests red; recorded in CHANGELOG).
 
 ## Limits (honest)

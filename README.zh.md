@@ -76,7 +76,7 @@ Manifest（见 `assets/example-manifest.json`）：
 python -m pytest tests/ -q
 ```
 
-38 个测试，仅标准库；人工谓词变异抽查（翻转 R1 臂闸门会使优越性测试变红；记录在
+64 个测试，仅标准库；人工谓词变异抽查（翻转 R1 臂闸门会使优越性测试变红；记录在
 CHANGELOG）。
 
 ## 限制（诚实披露）
