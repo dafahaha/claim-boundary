@@ -24,8 +24,16 @@ a deterministic pre-submission gate, not a style rewriter.
 
 No build, no dependencies.
 
-- Claude Code: `claude --plugin-dir ./claim-boundary`, or register the local
-  marketplace in `.claude-plugin/marketplace.json`.
+- Claude Code (from GitHub, personal marketplace):
+
+  ```bash
+  claude plugin marketplace add dafahaha/claim-boundary
+  claude plugin install claim-boundary@dafahaha-skills
+  ```
+
+  In a session: `/plugin marketplace add dafahaha/claim-boundary`, then
+  `/plugin install claim-boundary@dafahaha-skills`.
+- Claude Code (local development): `claude --plugin-dir ./claim-boundary`.
 - Portable skill (Codex/Cursor/Gemini CLI/Roo Code): copy
   `skills/claim-boundary/` into the client's skills directory.
 

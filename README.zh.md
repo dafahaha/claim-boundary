@@ -19,8 +19,16 @@ claim-boundary 是提交前的确定性闸门，不是文风改写器。
 
 无需编译，无需依赖。
 
-- Claude Code：`claude --plugin-dir ./claim-boundary`，或在
-  `.claude-plugin/marketplace.json` 注册本地市场。
+- Claude Code（GitHub 个人市场）：
+
+  ```bash
+  claude plugin marketplace add dafahaha/claim-boundary
+  claude plugin install claim-boundary@dafahaha-skills
+  ```
+
+  会话内：先 `/plugin marketplace add dafahaha/claim-boundary`，再
+  `/plugin install claim-boundary@dafahaha-skills`。
+- Claude Code（本地开发）：`claude --plugin-dir ./claim-boundary`。
 - 便携 skill（Codex/Cursor/Gemini CLI/Roo Code）：把 `skills/claim-boundary/`
   复制到客户端的 skills 目录。
 
